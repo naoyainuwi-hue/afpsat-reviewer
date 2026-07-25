@@ -1,0 +1,16 @@
+import 'dotenv/config';
+import { createClient } from '@supabase/supabase-js';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { topics, makeQuestions } = require('../data-bank.cjs');
+const url = process.env.SUPABASE_URL;
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!url || !key) throw new Error('Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY first.');
+const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+const topicRows = topics.map(({id,name,section,description}) => ({id,name,section,description}));
+let result = await db.from('topics').upsert(topicRows, { onConflict: 'id' });
+if (result.error) throw result.error;
+const questionRows = topics.flatMap(topic => makeQuestions(topic).map(q => ({topic_id:q.topic_id,question_index:q.question_index,prompt:q.prompt,options_json:q.options,correct_index:q.correct_index,explanation:q.explanation})));
+result = await db.from('questions').upsert(questionRows, { onConflict: 'topic_id,question_index' });
+if (result.error) throw result.error;
+console.log(`Seeded ${topicRows.length} topics and ${questionRows.length} questions.`);
